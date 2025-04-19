@@ -1,0 +1,7 @@
+CREATE TABLE images (
+    image_id INT AUTO_INCREMENT PRIMARY KEY,
+    ad_id INT NOT NULL,
+    url VARCHAR(255) NOT NULL,
+    `order` INT NOT NULL,
+    FOREIGN KEY (ad_id) REFERENCES ads(ad_id) ON DELETE CASCADE
+);
