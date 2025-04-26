@@ -1,160 +1,159 @@
 -- Création de la base de données
-CREATE DATABASE leboncoin;
-USE leboncoin;
+DROP DATABASE IF EXISTS electrobazar;
+CREATE DATABASE electrobazar;
+USE electrobazar;
 
 -- Création de la table des utilisateurs
-CREATE TABLE users (
-    user_id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE utilisateurs (
+    utilisateur_id INT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    phone VARCHAR(15),
+    mot_de_passe VARCHAR(255) NOT NULL,
+    telephone VARCHAR(15),
     pseudo VARCHAR(50) NOT NULL UNIQUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_login TIMESTAMP,
-    location VARCHAR(255)
+    role ENUM('admin', 'utilisateur') DEFAULT 'utilisateur',
+    date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    derniere_connexion TIMESTAMP NULL,
+    localisation VARCHAR(255)
 );
 
 -- Création de la table des catégories
 CREATE TABLE categories (
-    category_id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    parent_category_id INT DEFAULT NULL,
-    FOREIGN KEY (parent_category_id) REFERENCES categories(category_id)
+    categorie_id INT AUTO_INCREMENT PRIMARY KEY,
+    nom VARCHAR(255) NOT NULL,
+    categorie_parent_id INT DEFAULT NULL,
+    FOREIGN KEY (categorie_parent_id) REFERENCES categories(categorie_id)
+);
+
+-- Création de la table des marques
+CREATE TABLE marques (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nom VARCHAR(255) NOT NULL,
+    categorie_id INT,
+    date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (categorie_id) REFERENCES categories(categorie_id)
 );
 
 -- Création de la table des annonces
-CREATE TABLE ads (
-    ad_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    category_id INT NOT NULL,
-    title VARCHAR(255) NOT NULL,
+CREATE TABLE annonces (
+    annonce_id INT AUTO_INCREMENT PRIMARY KEY,
+    utilisateur_id INT NOT NULL,
+    categorie_id INT NOT NULL,
+    marque_id INT,
+    titre VARCHAR(255) NOT NULL,
     description TEXT,
-    price DECIMAL(10, 2) NOT NULL,
-    status ENUM('active', 'inactive', 'sold') DEFAULT 'active',
-    location VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id),
-    FOREIGN KEY (category_id) REFERENCES categories(category_id)
+    etat VARCHAR(50) NOT NULL,
+    prix DECIMAL(10, 2) NOT NULL,
+    prix_negociable TINYINT(1) DEFAULT 0,
+    mode_remise VARCHAR(50),
+    localisation VARCHAR(255),
+    masquer_telephone TINYINT(1) DEFAULT 0,
+    statut ENUM('en_attente', 'active', 'inactive', 'vendue') DEFAULT 'en_attente',
+    date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (utilisateur_id) REFERENCES utilisateurs(utilisateur_id),
+    FOREIGN KEY (categorie_id) REFERENCES categories(categorie_id),
+    FOREIGN KEY (marque_id) REFERENCES marques(id)
 );
 
 -- Création de la table des images
 CREATE TABLE images (
     image_id INT AUTO_INCREMENT PRIMARY KEY,
-    ad_id INT NOT NULL,
+    annonce_id INT NOT NULL,
     url VARCHAR(255) NOT NULL,
-    `order` INT NOT NULL,
-    FOREIGN KEY (ad_id) REFERENCES ads(ad_id) ON DELETE CASCADE
+    ordre INT NOT NULL,
+    date_ajout TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (annonce_id) REFERENCES annonces(annonce_id) ON DELETE CASCADE
 );
 
 -- Création de la table des messages
 CREATE TABLE messages (
     message_id INT AUTO_INCREMENT PRIMARY KEY,
-    sender_id INT NOT NULL,
-    receiver_id INT NOT NULL,
-    ad_id INT NOT NULL,
-    content TEXT NOT NULL,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sender_id) REFERENCES users(user_id),
-    FOREIGN KEY (receiver_id) REFERENCES users(user_id),
-    FOREIGN KEY (ad_id) REFERENCES ads(ad_id)
+    expediteur_id INT NOT NULL,
+    destinataire_id INT NOT NULL,
+    annonce_id INT NOT NULL,
+    contenu TEXT NOT NULL,
+    date_envoi DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (expediteur_id) REFERENCES utilisateurs(utilisateur_id),
+    FOREIGN KEY (destinataire_id) REFERENCES utilisateurs(utilisateur_id),
+    FOREIGN KEY (annonce_id) REFERENCES annonces(annonce_id)
 );
 
--- Création de la table des signalements
-CREATE TABLE reports (
-    report_id INT AUTO_INCREMENT PRIMARY KEY,
-    ad_id INT NOT NULL,
-    user_id INT NOT NULL,
-    reason VARCHAR(255) NOT NULL,
-    status ENUM('pending', 'resolved', 'dismissed') DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (ad_id) REFERENCES ads(ad_id),
-    FOREIGN KEY (user_id) REFERENCES users(user_id)
-);
+-- Insertion des catégories de base
+INSERT INTO categories (nom) VALUES 
+('Smartphones'),
+('Ordinateurs'),
+('Tablettes'),
+('Téléviseurs'),
+('Audio'),
+('Accessoires');
 
--- Création de la table des évaluations
-CREATE TABLE ratings (
-    rating_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    ad_id INT NOT NULL,
-    rating_value INT CHECK (rating_value BETWEEN 1 AND 5),
-    review TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id),
-    FOREIGN KEY (ad_id) REFERENCES ads(ad_id)
-);
+-- Insertion des marques de base
+INSERT INTO marques (nom, categorie_id) VALUES
+-- Smartphones
+('Apple', 1),
+('Samsung', 1),
+('Xiaomi', 1),
+('Huawei', 1),
+('OnePlus', 1),
+-- Ordinateurs
+('HP', 2),
+('Dell', 2),
+('Lenovo', 2),
+('Asus', 2),
+('Acer', 2),
+-- Tablettes
+('iPad', 3),
+('Galaxy Tab', 3),
+('Surface', 3),
+-- Téléviseurs
+('LG', 4),
+('Sony', 4),
+('Philips', 4),
+('Samsung TV', 4),
+-- Audio
+('Bose', 5),
+('JBL', 5),
+('Sony Audio', 5),
+('Sennheiser', 5),
+-- Accessoires
+('Logitech', 6),
+('Belkin', 6),
+('Razer', 6);
 
--- Création de la table des transactions
-CREATE TABLE transactions (
-    transaction_id INT AUTO_INCREMENT PRIMARY KEY,
-    ad_id INT NOT NULL,
-    user_id INT NOT NULL,
-    amount DECIMAL(10, 2) NOT NULL,
-    status ENUM('pending', 'completed', 'canceled') NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (ad_id) REFERENCES ads(ad_id),
-    FOREIGN KEY (user_id) REFERENCES users(user_id)
-);
-
--- Création de la vue pour la recherche avancée
-CREATE VIEW advanced_search AS
+-- Création des vues
+CREATE VIEW recherche_avancee AS
 SELECT 
-    a.ad_id,
-    a.title,
+    a.annonce_id,
+    a.titre,
     a.description,
-    a.price,
-    a.status,
-    a.location,
-    a.created_at,
-    u.user_id,
+    a.prix,
+    a.prix_negociable,
+    a.etat,
+    a.mode_remise,
+    a.statut,
+    a.localisation,
+    a.date_creation,
+    u.utilisateur_id,
     u.pseudo,
     u.email,
-    c.name AS category_name
+    c.nom AS categorie_nom,
+    m.nom AS marque_nom,
+    GROUP_CONCAT(i.url) AS images
 FROM 
-    ads a
+    annonces a
 JOIN 
-    users u ON a.user_id = u.user_id
+    utilisateurs u ON a.utilisateur_id = u.utilisateur_id
 JOIN 
-    categories c ON a.category_id = c.category_id
+    categories c ON a.categorie_id = c.categorie_id
+LEFT JOIN 
+    marques m ON a.marque_id = m.id
+LEFT JOIN 
+    images i ON a.annonce_id = i.annonce_id
 WHERE 
-    a.status = 'active';
-
--- Création de la vue pour l'activité des utilisateurs
-CREATE VIEW user_activity_view AS
-SELECT 
-    u.user_id,
-    u.pseudo,
-    COUNT(DISTINCT a.ad_id) AS total_ads,
-    COUNT(DISTINCT m.message_id) AS total_messages,
-    MAX(a.created_at) AS last_ad_date,
-    MAX(m.timestamp) AS last_message_date
-FROM 
-    users u
-LEFT JOIN 
-    ads a ON u.user_id = a.user_id
-LEFT JOIN 
-    messages m ON u.user_id = m.sender_id OR u.user_id = m.receiver_id
+    a.statut = 'active'
 GROUP BY 
-    u.user_id, u.pseudo;
+    a.annonce_id;
 
--- Insertion de données d'exemple dans la table des utilisateurs
-INSERT INTO users (email, password_hash, phone, pseudo, created_at, last_login, location) VALUES
-('john.doe@example.com', 'hashed_password_1', '1234567890', 'johnny', NOW(), NOW(), 'New York'),
-('jane.smith@example.com', 'hashed_password_2', '0987654321', 'janey', NOW(), NOW(), 'Los Angeles'),
-('alice.johnson@example.com', 'hashed_password_3', '5555555555', 'alice', NOW(), NOW(), 'Chicago'),
-('bob.brown@example.com', 'hashed_password_4', '4444444444', 'bobby', NOW(), NOW(), 'Houston'),
-('charlie.davis@example.com', 'hashed_password_5', '3333333333', 'charlie', NOW(), NOW(), 'Phoenix');
-
--- Insertion de données d'exemple dans la table des annonces
-INSERT INTO ads (user_id, category_id, title, description, price, status, location, created_at) VALUES
-(1, 1, 'Vintage Bicycle', 'A classic vintage bicycle in great condition.', 150.00, 'active', 'Paris', NOW()),
-(2, 2, 'Smartphone', 'Latest model smartphone with all accessories.', 600.00, 'active', 'Lyon', NOW()),
-(3, 3, 'Dining Table', 'Solid wood dining table, seats 6.', 300.00, 'active', 'Marseille', NOW()),
-(4, 1, 'Guitar', 'Acoustic guitar in excellent condition.', 200.00, 'active', 'Nice', NOW()),
-(5, 2, 'Laptop', 'High-performance laptop for gaming and work.', 1200.00, 'active', 'Toulouse', NOW());
-
--- Insertion de données d'exemple dans la table des messages
-INSERT INTO messages (sender_id, receiver_id, ad_id, content, timestamp) VALUES
-(1, 2, 1, 'Is this item still available?', '2023-10-01 10:00:00'),
-(2, 1, 1, 'Yes, it is! Would you like to come see it?', '2023-10-01 10:05:00'),
-(3, 1, 2, 'Can you lower the price?', '2023-10-02 11:00:00'),
-(1, 3, 2, 'Sorry, the price is firm.', '2023-10-02 11:10:00');
+-- Index pour améliorer les performances
+CREATE INDEX idx_annonces_statut ON annonces(statut);
+CREATE INDEX idx_images_annonce ON images(annonce_id);
+CREATE INDEX idx_marques_categorie ON marques(categorie_id);
