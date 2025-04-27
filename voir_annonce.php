@@ -4,6 +4,7 @@ require 'db.php';
 
 // Vérification du paramètre ID
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+    $_SESSION['error'] = "Annonce invalide";
     header('Location: accueil.php');
     exit;
 }
@@ -14,6 +15,7 @@ try {
         SELECT a.*, 
                u.pseudo,
                u.telephone,
+               u.utilisateur_id as vendeur_id,
                c.nom as categorie_nom,
                m.nom as marque_nom,
                GROUP_CONCAT(DISTINCT i.url) as images,
@@ -30,6 +32,7 @@ try {
     $annonce = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$annonce) {
+        $_SESSION['error'] = "Annonce introuvable";
         header('Location: accueil.php');
         exit;
     }
@@ -43,10 +46,14 @@ try {
     }
 
 } catch(PDOException $e) {
-    error_log($e->getMessage());
+    error_log('Erreur voir_annonce.php: ' . $e->getMessage());
+    $_SESSION['error'] = "Une erreur est survenue";
     header('Location: accueil.php');
     exit;
 }
+
+// Vérifier si l'utilisateur peut contacter le vendeur
+$can_contact = isset($_SESSION['user_id']) && $_SESSION['user_id'] !== $annonce['vendeur_id'];
 ?>
 
 <!DOCTYPE html>
@@ -72,23 +79,35 @@ try {
         .price-badge {
             font-size: 1.5rem;
         }
+        .modal-message {
+            display: none;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
     <?php include 'navbarCo.php'; ?>
 
+    <!-- Messages d'erreur/succès -->
+    <?php if (isset($_SESSION['error'])): ?>
+        <div class="alert alert-danger alert-dismissible fade show m-3">
+            <?= htmlspecialchars($_SESSION['error']) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        <?php unset($_SESSION['error']); ?>
+    <?php endif; ?>
+
+    <?php if (isset($_SESSION['success'])): ?>
+        <div class="alert alert-success alert-dismissible fade show m-3">
+            <?= htmlspecialchars($_SESSION['success']) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        <?php unset($_SESSION['success']); ?>
+    <?php endif; ?>
+
+    <!-- Contenu principal -->
     <div class="container mt-4">
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="accueil.php">Accueil</a></li>
-                <li class="breadcrumb-item">
-                    <a href="category.php?id=<?= $annonce['categorie_id'] ?>">
-                        <?= htmlspecialchars($annonce['categorie_nom']) ?>
-                    </a>
-                </li>
-                <li class="breadcrumb-item active"><?= htmlspecialchars($annonce['titre']) ?></li>
-            </ol>
-        </nav>
+        <!-- ... Votre code existant pour le fil d'Ariane ... -->
 
         <div class="row">
             <!-- Carousel d'images -->
@@ -110,7 +129,8 @@ try {
                                 <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
                                     <img src="uploads/<?= htmlspecialchars($image) ?>" 
                                          class="d-block w-100" 
-                                         alt="Image <?= $index + 1 ?>">
+                                         alt="Image <?= $index + 1 ?>"
+                                         onerror="this.src='images/default.jpg'">
                                 </div>
                             <?php endforeach; ?>
                         </div>
@@ -145,35 +165,29 @@ try {
                         <?php endif; ?>
                         <p><i class="bi bi-clock"></i> Publiée le <?= date('d/m/Y', strtotime($annonce['date_creation'])) ?></p>
                         <hr>
-                        <button type="button" class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#contactModal">
-                            <i class="bi bi-chat-dots"></i> Contacter le vendeur
-                        </button>
+                        <?php if (!isset($_SESSION['user_id'])): ?>
+                            <a href="login.php" class="btn btn-primary w-100">
+                                <i class="bi bi-box-arrow-in-right"></i> Connectez-vous pour contacter le vendeur
+                            </a>
+                        <?php elseif ($can_contact): ?>
+                            <button type="button" class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#contactModal">
+                                <i class="bi bi-chat-dots"></i> Contacter le vendeur
+                            </button>
+                        <?php else: ?>
+                            <button type="button" class="btn btn-secondary w-100" disabled>
+                                <i class="bi bi-chat-dots"></i> Votre annonce
+                            </button>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Description et détails -->
-        <div class="row mt-4">
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-body">
-                        <h2 class="h5">Description</h2>
-                        <p class="card-text"><?= nl2br(htmlspecialchars($annonce['description'])) ?></p>
-                        
-                        <h3 class="h5 mt-4">Caractéristiques</h3>
-                        <ul class="list-unstyled">
-                            <li><strong>État :</strong> <?= htmlspecialchars($annonce['etat']) ?></li>
-                            <li><strong>Marque :</strong> <?= htmlspecialchars($annonce['marque_nom']) ?></li>
-                            <li><strong>Mode de remise :</strong> <?= htmlspecialchars($annonce['mode_remise']) ?></li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- ... Votre code existant pour la description et les détails ... -->
     </div>
 
     <!-- Modal de contact -->
+    <?php if ($can_contact): ?>
     <div class="modal fade" id="contactModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -182,21 +196,29 @@ try {
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p><strong>Vendeur :</strong> <?= htmlspecialchars($annonce['pseudo']) ?></p>
-                    <?php if (!$annonce['masquer_telephone'] && $annonce['telephone']): ?>
-                        <p><strong>Téléphone :</strong> <?= htmlspecialchars($annonce['telephone']) ?></p>
-                    <?php endif; ?>
-                    <form id="contactForm">
+                    <form id="contactForm" onsubmit="return envoyerMessage(event)">
+                        <input type="hidden" id="annonce_id" value="<?= $annonce['annonce_id'] ?>">
+                        <input type="hidden" id="destinataire_id" value="<?= $annonce['vendeur_id'] ?>">
                         <div class="mb-3">
                             <label for="message" class="form-label">Votre message</label>
-                            <textarea class="form-control" id="message" rows="4" required></textarea>
+                            <textarea class="form-control" id="message" rows="4" required 
+                                    minlength="10" maxlength="1000"></textarea>
+                            <div class="form-text">
+                                Entre 10 et 1000 caractères
+                            </div>
                         </div>
-                        <button type="submit" class="btn btn-primary">Envoyer</button>
+                        <div class="alert alert-danger modal-message" id="errorMessage"></div>
+                        <div class="alert alert-success modal-message" id="successMessage"></div>
+                        <button type="submit" class="btn btn-primary" id="sendButton">
+                            <span class="spinner-border spinner-border-sm d-none" id="sendSpinner"></span>
+                            Envoyer
+                        </button>
                     </form>
                 </div>
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -226,19 +248,38 @@ try {
                     }
                 }
             })
-            .catch(error => console.error('Erreur:', error));
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('Une erreur est survenue');
+            });
         }
 
-        document.getElementById('contactForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            // Ici, ajoutez la logique pour envoyer le message
-            alert('Fonctionnalité en développement');
-        });
-
-        function contacterVendeur(annonceId, destinataireId) {
+        function envoyerMessage(event) {
+            event.preventDefault();
+            
             const message = document.getElementById('message').value.trim();
-            if (!message) return;
-                
+            const annonceId = document.getElementById('annonce_id').value;
+            const destinataireId = document.getElementById('destinataire_id').value;
+            const errorDiv = document.getElementById('errorMessage');
+            const successDiv = document.getElementById('successMessage');
+            const sendButton = document.getElementById('sendButton');
+            const spinner = document.getElementById('sendSpinner');
+            
+            // Cacher les messages précédents
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+            
+            // Validation
+            if (message.length < 10) {
+                errorDiv.textContent = 'Le message doit contenir au moins 10 caractères';
+                errorDiv.style.display = 'block';
+                return false;
+            }
+
+            // Désactiver le bouton et afficher le spinner
+            sendButton.disabled = true;
+            spinner.classList.remove('d-none');
+            
             fetch('send_message.php', {
                 method: 'POST',
                 headers: {
@@ -253,15 +294,29 @@ try {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    window.location.href = 'messages.php';
+                    successDiv.textContent = 'Message envoyé avec succès';
+                    successDiv.style.display = 'block';
+                    document.getElementById('message').value = '';
+                    setTimeout(() => {
+                        window.location.href = 'messages.php';
+                    }, 1500);
                 } else {
-                    alert('Erreur lors de l\'envoi du message');
+                    errorDiv.textContent = data.error || 'Erreur lors de l\'envoi du message';
+                    errorDiv.style.display = 'block';
                 }
             })
             .catch(error => {
                 console.error('Erreur:', error);
-                alert('Une erreur est survenue');
+                errorDiv.textContent = 'Une erreur est survenue lors de l\'envoi du message';
+                errorDiv.style.display = 'block';
+            })
+            .finally(() => {
+                // Réactiver le bouton et cacher le spinner
+                sendButton.disabled = false;
+                spinner.classList.add('d-none');
             });
+
+            return false;
         }
     </script>
 </body>

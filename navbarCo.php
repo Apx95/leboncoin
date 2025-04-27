@@ -175,7 +175,7 @@
     <nav class="navbar navbar-expand-lg">
         <div class="container-fluid">
             <!-- Logo -->
-            <a class="navbar-brand d-flex align-items-center" href="">
+            <a class="navbar-brand d-flex align-items-center" href="accueil.php">
                 <i class="bi bi-cpu me-2 text-primary"></i>
                 <span>ElectroBazar</span>
             </a>

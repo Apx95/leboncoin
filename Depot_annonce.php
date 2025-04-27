@@ -2,17 +2,32 @@
 session_start();
 require "db.php";
 
+// Vérification de l'authentification
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+// Ajouter validation des fichiers
+function validateFile($file) {
+    $maxSize = 5 * 1024 * 1024; // 5MB
+    $allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    
+    if ($file['size'] > $maxSize) {
+        return false;
+    }
+    if (!in_array($file['type'], $allowedTypes)) {
+        return false;
+    }
+    return true;
+}
+
 $brouillon = null;
 if (isset($_GET['edit_brouillon']) && isset($_SESSION['brouillon_data'])) {
     $brouillon = $_SESSION['brouillon_data'];
     unset($_SESSION['brouillon_data']); // Nettoyer la session
 }
 
-// Vérification de l'authentification
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
-    exit();
-}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     error_log('Données reçues : ' . print_r($_POST, true));
     error_log('Fichiers reçus : ' . print_r($_FILES, true));
@@ -490,35 +505,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (form) {
                 form.addEventListener('submit', async function(e) {
                     e.preventDefault();
-                
+                    
+                    // Vérifier la validation de tous les champs
                     if (!validateAllSteps()) {
-                        alert('Veuillez remplir tous les champs obligatoires');
+                        showError('Veuillez remplir tous les champs obligatoires');
                         return;
                     }
-                
+                    
+                    // Désactiver le bouton et montrer le chargement
+                    const submitBtn = document.getElementById('submit-btn');
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Publication en cours...';
+                    
                     try {
                         const formData = new FormData(this);
-
-                        // Envoyer le formulaire
-                        const response = await fetch('Depot_annonce.php', {
+                        
+                        // Envoi du formulaire
+                        const response = await fetch('traitement_ads.php', {
                             method: 'POST',
                             body: formData
                         });
-                    
-                        if (!response.ok) {
-                            throw new Error('Erreur lors de l\'envoi du formulaire');
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            // Redirection vers la page de l'annonce
+                            window.location.href = `publication.php?id=${data.annonce_id}`;
+                        } else {
+                            throw new Error(data.message || 'Erreur lors de la publication');
                         }
-                    
-                        // Rediriger vers la page de succès
-                        window.location.href = 'publication.php?id=' + await response.text();
+                        
                     } catch (error) {
                         console.error('Erreur:', error);
-                        alert('Une erreur est survenue lors de la publication de l\'annonce');
+                        showError(error.message || 'Une erreur est survenue lors de la publication');
+                    } finally {
+                        // Réactiver le bouton
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = 'Publier l\'annonce';
                     }
                 });
             }
-        
-            // Fonction pour valider toutes les étapes
+            
+            // Fonction d'affichage des erreurs
+            function showError(message) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'alert alert-danger alert-dismissible fade show';
+                errorDiv.innerHTML = `
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                form.prepend(errorDiv);
+                
+                // Scroll vers le message d'erreur
+                errorDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                
+                // Auto-suppression après 5 secondes
+                setTimeout(() => {
+                    errorDiv.remove();
+                }, 5000);
+            }
+            
+            // Validation de toutes les étapes
             function validateAllSteps() {
                 let isValid = true;
                 steps.forEach((step, index) => {
@@ -527,6 +574,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if (!field.value) {
                             isValid = false;
                             field.classList.add('is-invalid');
+                            if (!field.nextElementSibling?.classList.contains('invalid-feedback')) {
+                                const feedback = document.createElement('div');
+                                feedback.className = 'invalid-feedback';
+                                feedback.textContent = 'Ce champ est requis';
+                                field.after(feedback);
+                            }
                         } else {
                             field.classList.remove('is-invalid');
                         }

@@ -134,8 +134,7 @@ try {
                                             <a href="voir_annonce.php?id=<?= $annonce['annonce_id'] ?>" 
                                                class="btn btn-primary btn-sm">Voir</a>
                                             <div>
-                                                <a href="modifier_annonce.php?id=<?= $annonce['annonce_id'] ?>" 
-                                                   class="btn btn-secondary btn-sm me-1">Modifier</a>
+                                                
                                                 <button class="btn btn-danger btn-sm" 
                                                         onclick="supprimerAnnonce(<?= $annonce['annonce_id'] ?>)">
                                                     <i class="bi bi-trash"></i>

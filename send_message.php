@@ -2,33 +2,36 @@
 session_start();
 require 'db.php';
 
+// Configuration des headers
+header('Content-Type: application/json');
+header('Cache-Control: no-cache, must-revalidate');
+
 // Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-header('Content-Type: application/json');
-
-// Log incoming request data
-error_log('Debug - POST: ' . print_r($_POST, true));
-error_log('Debug - RAW: ' . file_get_contents('php://input'));
-
-// Check authentication
+// Vérification de l'authentification
 if (!isset($_SESSION['user_id'])) {
     http_response_code(401);
     die(json_encode(['success' => false, 'error' => 'Non autorisé']));
 }
 
-// Get input data (support both POST and JSON)
+// Récupération des données (POST ou JSON)
 $data = [];
+$rawInput = file_get_contents('php://input');
+error_log('Debug - Raw input: ' . $rawInput);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if ($_SERVER['CONTENT_TYPE'] === 'application/json') {
-        $data = json_decode(file_get_contents('php://input'), true);
+    if (isset($_SERVER['CONTENT_TYPE']) && strpos($_SERVER['CONTENT_TYPE'], 'application/json') !== false) {
+        $data = json_decode($rawInput, true);
     } else {
         $data = $_POST;
     }
 }
 
-// Validate input
+error_log('Debug - Processed data: ' . print_r($data, true));
+
+// Validation des données
 if (empty($data)) {
     http_response_code(400);
     die(json_encode(['success' => false, 'error' => 'Aucune donnée reçue']));
@@ -45,17 +48,21 @@ try {
     $conversationId = null;
     $destinataireId = null;
 
-    // Handle new conversation
+    // Gestion d'une nouvelle conversation
     if (isset($data['annonce_id']) && isset($data['destinataire_id'])) {
-        // Check if conversation already exists
+        // Vérification de l'existence d'une conversation
         $stmt = $db->prepare("
             SELECT conversation_id 
-            FROM conversations 
-            WHERE annonce_id = ? AND EXISTS (
-                SELECT 1 FROM messages 
-                WHERE messages.conversation_id = conversations.conversation_id
-                AND ((expediteur_id = ? AND destinataire_id = ?) 
-                OR (expediteur_id = ? AND destinataire_id = ?))
+            FROM conversations c
+            WHERE c.annonce_id = ? 
+            AND EXISTS (
+                SELECT 1 
+                FROM messages m 
+                WHERE m.conversation_id = c.conversation_id
+                AND (
+                    (m.expediteur_id = ? AND m.destinataire_id = ?) 
+                    OR (m.expediteur_id = ? AND m.destinataire_id = ?)
+                )
             )
         ");
         
@@ -72,7 +79,7 @@ try {
         if ($existingConv) {
             $conversationId = $existingConv['conversation_id'];
         } else {
-            // Create new conversation
+            // Création d'une nouvelle conversation
             $stmt = $db->prepare("
                 INSERT INTO conversations (annonce_id, date_creation) 
                 VALUES (?, NOW())
@@ -82,9 +89,9 @@ try {
         }
         $destinataireId = $data['destinataire_id'];
     }
-    // Handle existing conversation
+    // Gestion d'une conversation existante
     elseif (isset($data['conversation_id'])) {
-        // Verify conversation access and get recipient
+        // Vérification des droits d'accès
         $stmt = $db->prepare("
             SELECT DISTINCT
                 c.conversation_id,
@@ -118,7 +125,7 @@ try {
         throw new Exception('Paramètres manquants pour la conversation');
     }
 
-    // Insert message
+    // Insertion du message
     $stmt = $db->prepare("
         INSERT INTO messages (
             conversation_id,
@@ -139,23 +146,30 @@ try {
 
     $messageId = $db->lastInsertId();
 
-    // Get message details for response
+    // Récupération des détails du message
     $stmt = $db->prepare("
         SELECT 
             m.*,
             u.pseudo as expediteur_pseudo,
-            c.annonce_id
+            c.annonce_id,
+            a.titre as annonce_titre
         FROM messages m
         JOIN utilisateurs u ON m.expediteur_id = u.utilisateur_id
         JOIN conversations c ON m.conversation_id = c.conversation_id
+        JOIN annonces a ON c.annonce_id = a.annonce_id
         WHERE m.message_id = ?
     ");
     
     $stmt->execute([$messageId]);
     $message = $stmt->fetch(PDO::FETCH_ASSOC);
 
+    if (!$message) {
+        throw new Exception('Erreur lors de la récupération du message');
+    }
+
     $db->commit();
 
+    // Réponse avec les détails du message
     echo json_encode([
         'success' => true,
         'message' => [
@@ -165,7 +179,8 @@ try {
             'expediteur_pseudo' => $message['expediteur_pseudo'],
             'message' => htmlspecialchars($message['message']),
             'date_envoi' => $message['date_envoi'],
-            'annonce_id' => $message['annonce_id']
+            'annonce_id' => $message['annonce_id'],
+            'annonce_titre' => $message['annonce_titre']
         ]
     ]);
 
